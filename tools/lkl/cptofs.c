@@ -22,7 +22,7 @@ static const char args_doc_cptofs[] = "-t fstype -i fsimage path... fs_path";
 static const char args_doc_cpfromfs[] = "-t fstype -i fsimage fs_path... path";
 
 static struct argp_option options[] = {
-	{"enable-printk", 'p', 0, 0, "show Linux printks"},
+	{"enable-printf", 'p', 0, 0, "show Linux printfs"},
 	{"partition", 'P', "int", 0, "partition number"},
 	{"filesystem-type", 't', "string", 0,
 	 "select filesystem type - mandatory"},
@@ -35,7 +35,7 @@ static struct argp_option options[] = {
 };
 
 static struct cl_args {
-	int printk;
+	int printf;
 	int part;
 	const char *fsimg_type;
 	const char *fsimg_path;
@@ -54,7 +54,7 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
 
 	switch (key) {
 	case 'p':
-		cla->printk = 1;
+		cla->printf = 1;
 		break;
 	case 'P':
 		cla->part = atoi(arg);
@@ -626,7 +626,7 @@ int main(int argc, char **argv)
 	if (ret < 0)
 		return -1;
 
-	if (!cla.printk)
+	if (!cla.printf)
 		lkl_host_ops.print = NULL;
 
 	disk.fd = open(cla.fsimg_path, cptofs ? O_RDWR : O_RDONLY);
@@ -639,12 +639,14 @@ int main(int argc, char **argv)
 
 	disk.ops = NULL;
 
+    printf("FROM cptofs.c ABOUT TO RUN lkl_init\n");
 	ret = lkl_init(&lkl_host_ops);
 	if (ret < 0) {
 		fprintf(stderr, "lkl init failed: %s\n", lkl_strerror(ret));
 		goto out_close;
 	}
 
+    printf("FROM cptofs.c ABOUT TO RUN lkl_disk_add\n");
 	ret = lkl_disk_add(&disk);
 	if (ret < 0) {
 		fprintf(stderr, "can't add disk: %s\n", lkl_strerror(ret));
@@ -652,6 +654,7 @@ int main(int argc, char **argv)
 	}
 	disk_id = ret;
 
+    printf("FROM cptofs.c ABOUT TO RUN lkl_start_kernel\n");
 	ret = lkl_start_kernel("mem=100M");
 	if (ret < 0) {
 		fprintf(stderr, "failed to start kernel: %s\n",
@@ -659,6 +662,7 @@ int main(int argc, char **argv)
 		goto out_lkl_cleanup;
 	}
 
+    printf("FROM cptofs.c ABOUT TO RUN lkl_mount_dev\n");
 	ret = lkl_mount_dev(disk_id, cla.part, cla.fsimg_type,
 			    cptofs ? 0 : LKL_MS_RDONLY,
 			    NULL, mpoint, sizeof(mpoint));
@@ -667,6 +671,8 @@ int main(int argc, char **argv)
 		goto out_lkl_halt;
 	}
 
+
+    printf("FROM cptofs.c ABOUT TO RUN lkl_sys_umask\n");
 	lkl_sys_umask(0);
 
 	for (i = 0; i < cla.npaths - 1; i++) {
@@ -680,6 +686,7 @@ int main(int argc, char **argv)
 
 	snprintf(dev_str, sizeof(dev_str), "/dev/%08x", disk_id);
 	for (;;) {
+        printf("FROM cptofs.c ABOUT TO RUN lkl_sys_mount\n");
 		ret = lkl_sys_mount(dev_str, mpoint, (char *)cla.fsimg_type, LKL_MS_RDONLY|LKL_MS_REMOUNT, NULL);
 		if (ret == 0)
 			break;
@@ -696,14 +703,17 @@ int main(int argc, char **argv)
 		}
 	}
 
+    printf("FROM cptofs.c ABOUT TO RUN lkl_umount_dev\n");
 	umount_ret = lkl_umount_dev(disk_id, cla.part, 0, 1000);
 	if (ret == 0)
 		ret = umount_ret;
 
 out_lkl_halt:
+    printf("FROM cptofs.c ABOUT TO RUN lkl_sys_halt\n");
 	lkl_sys_halt();
 
 out_lkl_cleanup:
+    printf("FROM cptofs.c ABOUT TO RUN lkl_cleanup\n");
 	lkl_cleanup();
 
 out_close:
